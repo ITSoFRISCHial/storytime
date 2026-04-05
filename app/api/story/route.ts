@@ -55,9 +55,9 @@ Guidelines:
 - Tone: warm, playful, a little silly, exciting
 - Keep it positive and age-appropriate
 - Up to 4 named characters (always include a Narrator)
-- scenes: break the full story into narration + dialogue chunks for read-aloud TTS
-- story: 300–400 words, simple vocabulary, fun to read aloud
-- simple_story: even shorter sentences, 80–120 words, for early readers sounding out words
+- scenes: each scene's "text" must be a complete, narrable sentence INCLUDING speaker attribution for dialogue — e.g. \`"I love adventures!" said Mia.\` NOT just \`"I love adventures!"\` — the speaker field sets the voice, the text is what gets read aloud
+- story: 300–400 words, simple vocabulary, fun to read aloud — use \\n\\n between paragraphs
+- simple_story: even shorter sentences, 80–120 words, for early readers sounding out words — use \\n\\n between paragraphs
 - voiceStyle per character: TTS hint (e.g. "warm, calm", "bright, energetic")`);
   return lines.join("\n");
 }
