@@ -8,6 +8,7 @@ interface ConfirmViewProps {
   durationSeconds: number;
   onConfirm: (options: StoryOptions) => void;
   onReRecord: () => void;
+  error?: string | null;
 }
 
 export default function ConfirmView({
@@ -15,6 +16,7 @@ export default function ConfirmView({
   durationSeconds,
   onConfirm,
   onReRecord,
+  error,
 }: ConfirmViewProps) {
   const [options, setOptions] = useState<StoryOptions>({
     onceUponATime: true,
@@ -228,6 +230,14 @@ export default function ConfirmView({
           <span className="text-lg font-semibold">Happily ever after</span>
         </label>
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="w-full max-w-sm bg-accent/10 border-2 border-accent rounded-2xl p-4 text-center">
+          <p className="text-accent font-semibold">{error}</p>
+          <p className="text-sm text-text-muted mt-1">Try again or re-record</p>
+        </div>
+      )}
 
       {/* Go button */}
       <div className="mt-auto w-full max-w-sm pt-4">

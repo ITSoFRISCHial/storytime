@@ -13,7 +13,7 @@ export default function StoryCard({ story, onClick }: StoryCardProps) {
       onClick={onClick}
       className="bg-surface rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow text-left w-full active:scale-[0.98]"
     >
-      <div className="aspect-[16/10] bg-gray-200 flex items-center justify-center">
+      <div className="aspect-[4/3] bg-gray-200 flex items-center justify-center">
         {story.imageUrl ? (
           <img
             src={story.imageUrl}

@@ -29,7 +29,7 @@ export const StoryGenerationSchema = z.object({
   scenes: z.array(SceneSchema).min(1),
   story: z.string(),
   simple_story: z.string(),
-  image_prompt: z.string(),
+  image_prompt: z.string().optional().default(""),
   safety_notes: SafetyNotesSchema,
 });
 

@@ -1,47 +1,35 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { SavedStory, StoryOptions } from "@/types/story";
-import { getSavedStories } from "@/lib/storage";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { SavedStory, StoryOptions, StoryGenerationSchema } from "@/types/story";
+import { getSavedStories, saveStory } from "@/lib/storage";
 import RecordingView from "@/components/RecordingView";
 import ConfirmView from "@/components/ConfirmView";
 import StoryView from "@/components/StoryView";
 import LoadingView from "@/components/LoadingView";
 import StoryCard from "@/components/StoryCard";
+import GateView from "@/components/GateView";
 
-type AppScreen = "home" | "recording" | "confirm" | "loading" | "story";
+type AppScreen = "gate" | "home" | "confirm" | "loading" | "story";
 
-// Mock story for development
-const MOCK_STORY: SavedStory = {
-  id: "mock-1",
-  createdAt: new Date().toISOString(),
-  title: "The Brave Little Fox",
-  transcript: "a story about a fox who goes on an adventure",
-  options: { onceUponATime: true, happilyEverAfter: true },
-  story: "Once upon a time, in a forest full of tall green trees and soft golden light, there lived a little fox named Rosie. Rosie had the fluffiest red tail in the whole forest, and she loved to explore.\n\nOne morning, Rosie found a trail of sparkling blue stones she had never seen before. \"Where do these go?\" she wondered, her ears perking up with excitement.\n\nShe followed the stones through the meadow, past the old oak tree, and all the way to a hidden pond. There, sitting on a lily pad, was a tiny frog wearing a crown made of daisies.\n\n\"Hello!\" said the frog. \"I'm Prince Pip. I've been waiting for someone brave enough to find me!\"\n\n\"I'm Rosie,\" she said with a smile. \"What are you doing out here all alone?\"\n\n\"I lost my way home,\" Pip said sadly. \"Could you help me find it?\"\n\nRosie nodded. Together, they hopped and trotted through the forest. Rosie used her sharp nose to sniff out the path, and Pip sang a little song to keep them cheerful.\n\nAt last, they found Pip's home — a cozy log by the stream, covered in soft moss and tiny flowers. Pip's family cheered when they saw him.\n\n\"Thank you, Rosie!\" said Pip. \"You're the bravest fox I've ever met.\"\n\nRosie wagged her fluffy tail. She had made a new friend, and that was the best adventure of all.\n\nAnd they all lived happily ever after.",
-  simpleStory: "Rosie is a little fox. She has a red tail. She likes to play.\n\nOne day she sees blue rocks. She follows them. She finds a frog.\n\nThe frog is Pip. He is lost. Rosie helps him.\n\nThey walk and walk. They find his home.\n\nPip says thank you. Rosie is happy.\n\nThey are friends now.",
-  imageUrl: null,
-  audioUrl: null,
-  characters: [
-    { name: "Narrator", voiceStyle: "warm, calm", description: "Story narrator" },
-    { name: "Rosie", voiceStyle: "bright, energetic", description: "A brave little fox" },
-    { name: "Pip", voiceStyle: "playful, small", description: "A tiny frog prince" },
-  ],
-  scenes: [
-    { speaker: "Narrator", text: "Once upon a time, in a forest full of tall green trees..." },
-    { speaker: "Rosie", text: "Where do these go?" },
-    { speaker: "Pip", text: "Hello! I'm Prince Pip." },
-  ],
-};
 
 export default function Home() {
-  const [screen, setScreen] = useState<AppScreen>("home");
+  const [screen, setScreen] = useState<AppScreen>("gate");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioDuration, setAudioDuration] = useState(0);
   const [currentStory, setCurrentStory] = useState<SavedStory | null>(null);
   const [savedStories, setSavedStories] = useState<SavedStory[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [audioError, setAudioError] = useState(false);
+  const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Check if already authenticated (cookie present)
+    fetch("/api/gate")
+      .then((r) => { if (r.ok) setScreen("home"); })
+      .catch(() => {});
     setSavedStories(getSavedStories());
   }, []);
 
@@ -51,27 +39,113 @@ export default function Home() {
     setScreen("confirm");
   }, []);
 
-  const handleConfirm = useCallback((_options: StoryOptions) => {
-    // For now, show mock story after a brief loading state
+  const handleConfirm = useCallback(async (options: StoryOptions) => {
+    if (!audioBlob) return;
+    setError(null);
+    setImageError(false);
+    setAudioError(false);
     setScreen("loading");
-    setTimeout(() => {
-      setCurrentStory(MOCK_STORY);
+
+    try {
+      // Step 1: Transcribe
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
+
+      const transcribeRes = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!transcribeRes.ok) {
+        const err = await transcribeRes.json();
+        throw new Error(err.error || "Transcription failed");
+      }
+
+      const { transcript } = await transcribeRes.json();
+
+      // Step 2: Generate story with Claude
+      const storyRes = await fetch("/api/story", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript, options }),
+      });
+
+      if (!storyRes.ok) {
+        const err = await storyRes.json();
+        throw new Error(err.error || "Story generation failed");
+      }
+
+      const storyData = StoryGenerationSchema.parse(await storyRes.json());
+
+      const story: SavedStory = {
+        id: uuidv4(),
+        createdAt: new Date().toISOString(),
+        title: storyData.title,
+        transcript,
+        options,
+        story: storyData.story,
+        simpleStory: storyData.simple_story,
+        imageUrl: null,
+        audioUrl: null,
+        characters: storyData.characters,
+        scenes: storyData.scenes,
+      };
+
+      saveStory(story); // persist text immediately; image/audio patch in below
+      setCurrentStory(story);
       setScreen("story");
-    }, 2000);
-  }, []);
+
+      // Fire image + audio in parallel; update story as each resolves
+      const updateStory = (patch: Partial<SavedStory>) => {
+        setCurrentStory((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, ...patch };
+          saveStory(updated);
+          return updated;
+        });
+      };
+
+      Promise.all([
+        fetch("/api/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: storyData.image_prompt }),
+        })
+          .then((r) => r.json())
+          .then((d) => { if (d.url) updateStory({ imageUrl: d.url }); else setImageError(true); })
+          .catch((e) => { console.error("Image generation failed:", e); setImageError(true); }),
+
+        fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scenes: storyData.scenes, characters: storyData.characters }),
+        })
+          .then((r) => r.json())
+          .then((d) => { if (d.url) updateStory({ audioUrl: d.url }); else setAudioError(true); })
+          .catch((e) => { console.error("TTS failed:", e); setAudioError(true); }),
+      ]);
+    } catch (err) {
+      console.error("Error:", err);
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setScreen("confirm");
+    }
+  }, [audioBlob]);
 
   const handleReRecord = useCallback(() => {
     setAudioBlob(null);
     setAudioDuration(0);
-    setScreen("recording");
+    setScreen("home");
   }, []);
 
   const handleNewStory = useCallback(() => {
     setAudioBlob(null);
     setAudioDuration(0);
     setCurrentStory(null);
+    setImageError(false);
+    setAudioError(false);
     setScreen("home");
     setSavedStories(getSavedStories());
+    setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }, []);
 
   const handleViewStory = useCallback((story: SavedStory) => {
@@ -79,26 +153,22 @@ export default function Home() {
     setScreen("story");
   }, []);
 
-  // Home screen
+  if (screen === "gate") {
+    return (
+      <div className="flex flex-col flex-1 min-h-screen">
+        <GateView onAuthenticated={() => { setSavedStories(getSavedStories()); setScreen("home"); }} />
+      </div>
+    );
+  }
+
+  // Home screen (mic + saved stories)
   if (screen === "home") {
     return (
       <div className="flex flex-col flex-1 min-h-screen">
-        <div className="flex flex-col items-center justify-center flex-1 gap-8 px-6 py-12">
-          <h1 className="text-5xl font-extrabold text-foreground tracking-tight">
-            Storytime
-          </h1>
-          <p className="text-lg text-text-muted text-center max-w-xs">
-            What should your story be about?
-          </p>
-          <button
-            onClick={() => setScreen("recording")}
-            className="w-full max-w-xs py-4 bg-primary hover:bg-primary-dark text-white text-xl font-bold rounded-2xl shadow-md active:scale-[0.98] transition-all"
-          >
-            Storytime
-          </button>
+        <div ref={topRef} className="flex flex-col flex-1">
+          <RecordingView onRecordingComplete={handleRecordingComplete} />
         </div>
 
-        {/* Recent stories */}
         {savedStories.length > 0 && (
           <div className="px-6 pb-8">
             <h2 className="text-xl font-bold text-foreground mb-4">Recent Stories</h2>
@@ -117,14 +187,6 @@ export default function Home() {
     );
   }
 
-  if (screen === "recording") {
-    return (
-      <div className="flex flex-col flex-1 min-h-screen">
-        <RecordingView onRecordingComplete={handleRecordingComplete} />
-      </div>
-    );
-  }
-
   if (screen === "confirm" && audioBlob) {
     return (
       <div className="flex flex-col flex-1 min-h-screen">
@@ -133,6 +195,7 @@ export default function Home() {
           durationSeconds={audioDuration}
           onConfirm={handleConfirm}
           onReRecord={handleReRecord}
+          error={error}
         />
       </div>
     );
@@ -149,7 +212,7 @@ export default function Home() {
   if (screen === "story" && currentStory) {
     return (
       <div className="flex flex-col flex-1 min-h-screen">
-        <StoryView story={currentStory} onNewStory={handleNewStory} />
+        <StoryView story={currentStory} onNewStory={handleNewStory} imageError={imageError} audioError={audioError} />
       </div>
     );
   }
