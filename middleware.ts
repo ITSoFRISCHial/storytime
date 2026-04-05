@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
   const cookie = request.cookies.get(COOKIE_NAME)?.value;
   const gateKey = process.env.APP_GATE_KEY;
 
-  if (!gateKey || cookie !== gateKey) {
+  if (!gateKey || cookie !== gateKey.trim()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

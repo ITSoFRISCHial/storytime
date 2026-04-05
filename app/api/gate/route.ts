@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Gate not configured" }, { status: 500 });
   }
 
-  if (!password || password !== gateKey) {
+  if (!password || password.trim() !== gateKey.trim()) {
     return NextResponse.json({ error: "Wrong password" }, { status: 401 });
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(COOKIE_NAME, gateKey, {
+  response.cookies.set(COOKIE_NAME, gateKey.trim(), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
