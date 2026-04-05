@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const COOKIE_NAME = "storytime_auth";
-const PUBLIC_PATHS = ["/api/gate"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -9,8 +8,8 @@ export function middleware(request: NextRequest) {
   // Only protect API routes
   if (!pathname.startsWith("/api")) return NextResponse.next();
 
-  // Allow the gate endpoint itself through
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  // Allow POST to /api/gate (password submission) but not GET (auth check)
+  if (pathname === "/api/gate" && request.method === "POST") return NextResponse.next();
 
   const cookie = request.cookies.get(COOKIE_NAME)?.value;
   const gateKey = process.env.APP_GATE_KEY;
