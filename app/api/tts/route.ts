@@ -3,13 +3,13 @@ import { synthesizeSpeech } from "@/lib/ttsClient";
 import { put } from "@vercel/blob";
 import { Character, Scene } from "@/types/story";
 
-// Journey voices pool — assigned to characters in order
-// F = warm female, D = warm male, O = alternative female
+// Standard voices pool — assigned to characters in order
+// C = warm female, D = deeper male, E = bright female, B = lower male
 const VOICE_POOL = [
-  "en-US-Journey-F",
-  "en-US-Journey-D",
-  "en-US-Journey-O",
-  "en-US-Journey-F", // fallback if >3 characters
+  "en-US-Standard-C", // narrator: warm female
+  "en-US-Standard-D", // character 1: deeper male
+  "en-US-Standard-E", // character 2: bright female
+  "en-US-Standard-B", // character 3: lower male
 ];
 
 function assignVoices(characters: Character[]): Record<string, string> {
